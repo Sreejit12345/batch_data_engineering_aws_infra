@@ -36,4 +36,6 @@ jobs:
                 name: network-stack-${{ github.ref_name }}
                 template: ./src/stacks/networking.yml
                 parameter-overrides: 'env=${{ github.ref_name }}'
+                capabilities: CAPABILITY_NAMED_IAM
+                
                 
