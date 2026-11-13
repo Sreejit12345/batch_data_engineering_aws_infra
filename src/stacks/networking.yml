@@ -1,0 +1,196 @@
+# Based on env: 
+# Sets up an IAM role that is used by aws glue for execution.
+# Sets up an IAM role that is used by step fucntion
+# Security group to control redshift serverless networking.
+
+# for all env a single cicd iam role that is used by githubactions to deploy code. This role is also used to deploy code to redshift serverless by cicd for all env.
+# Remeber our dev and prod are in same aws account and also we must create stack for dev atleast  once- which is when cicd role is created, it is skipped for others 
+
+# sets up a vpc and 3 private subnets in different AZs for resdshift serverless to run . 
+# The VPC and subnets are not per environment- to save costs.  and also we must create stack for dev atleast  once- which is when these are created, it is skipped for other env.
+
+# SG created is env specifc
+
+Parameters:
+  env:
+    Type: String
+    AllowedValues: [dev, prod]
+
+Conditions:
+  DevEnv: !Equals [!Ref env , dev]
+  ProdEnv: !Equals [!Ref env , prod]
+  
+Resources:
+  IAMROLEGlUE:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub glue-iam-${env}
+      AssumeRolePolicyDocument:    # This defines who can assume this role, in this case glue can assume this role
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: 
+                - "glue.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      ManagedPolicyArns: 
+        - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+        - "arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole"
+        - "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
+
+  StepFucntionIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub stepFunction-iam-${env}
+      AssumeRolePolicyDocument:    # This defines who can assume this role, in this case glue can assume this role
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: 
+                - "states.amazonaws.com"
+                - "scheduler.amazonaws.com"
+              
+            Action: 
+              - "sts:AssumeRole"
+      ManagedPolicyArns: 
+        - "arn:aws:iam::468094684048:policy/service-role/GlueJobRunManagementFullAccessPolicy-8a9f79fd-b209-4606-8622-96595fa4f15e"
+        - "arn:aws:iam::468094684048:policy/service-role/XRayAccessPolicy-62e76883-e140-40cb-a8fc-0dce2f32caa0"
+        - "arn:aws:iam::aws:policy/AmazonSNSFullAccess"
+        - "arn:aws:iam::aws:policy/AWSStepFunctionsFullAccess"
+     
+  CICDIAMROLE:  #assumed by github actions to deploy code- also assumed by github actions to deploy code to redshift for all env. assumed by redshift for operations like load unload etc.
+    Type: AWS::IAM::Role
+    Condition: DevEnv
+    Properties:
+      RoleName: cicd-iam
+      AssumeRolePolicyDocument:    
+        Version: "2012-10-17"
+        Statement:
+
+        # This allows githib cicd oidc provider to access aws
+          - Effect: Allow
+            Principal:
+              Federated: 'arn:aws:iam::468094684048:oidc-provider/token.actions.githubusercontent.com' 
+            Action: 
+              - "sts:AssumeRoleWithWebIdentity"
+            Condition: 
+              StringEquals:
+                'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com' 
+              StringLike:
+                'token.actions.githubusercontent.com:sub':
+                  - 'repo:Sreejit12345@104053831/batch_data_engineering_aws@1430822813:*'
+          # This allows iam users with proper permissions to access this role
+          - Effect: Allow
+            Principal:
+              AWS: 'arn:aws:iam::468094684048:root'
+            Action: 
+              - "sts:AssumeRole"
+          
+          # Allows redshift serverless to assume this IAM role
+          - Effect: Allow
+            Principal:
+              Service: 'redshift.amazonaws.com'
+            Action: 
+              - "sts:AssumeRole"
+
+      ManagedPolicyArns: 
+        - "arn:aws:iam::aws:policy/AdministratorAccess"
+        - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+        - "arn:aws:iam::aws:policy/AmazonRedshiftFullAccess"
+        - "arn:aws:iam::aws:policy/AmazonRedshiftQueryEditorV2ReadWriteSharing"
+        - "arn:aws:iam::aws:policy/AmazonRedshiftDataFullAccess"
+        - "arn:aws:iam::aws:policy/AmazonRedshiftAllCommandsFullAccess"
+      
+      # needed so that this IAM role's corresponding user in redshift 
+      # (which is used to create objects) is automaticlaly assigned the role "admin_role" in db.
+      Tags:
+        - Key: RedshiftDbRoles
+          Value: admin_role
+
+  
+  MyVPC:
+    Type:  AWS::EC2::VPC
+    Condition: DevEnv
+    Properties:
+      CidrBlock: 10.0.0.0/24
+      EnableDnsHostnames: true   #best practice
+      EnableDnsSupport: true     #best practice
+  
+  MyPrivateSubnet1:   #private subnet 1
+    Type: AWS::EC2::Subnet
+    Condition: DevEnv
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.0.0.0/26
+      AvailabilityZoneId: aps1-az1
+ 
+  MyPrivateSubnet2:   #private subnet 2
+    Type: AWS::EC2::Subnet
+    Condition: DevEnv
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.0.0.64/26
+      AvailabilityZoneId: aps1-az2
+    
+  MyPrivateSubnet3:   #private subnet 2
+    Type: AWS::EC2::Subnet
+    Condition: DevEnv
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.0.0.128/26
+      AvailabilityZoneId: aps1-az3
+
+  MyRedshiftSecurityGroup:  #creates a SG which allows traffic in and out of redshift
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub redshift-sg-${env}
+      GroupDescription: Security group for redshift
+      VpcId: !Ref MyVPC
+
+Outputs:
+  iamglue:
+    Description: Iam for glue execution
+    Value: !Ref IAMROLEGlUE
+    Export: 
+      Name: !Sub glueIam-${env}
+
+  iamstepFn:
+    Description: Iam for step fucntion execution
+    Value: !GetAtt StepFucntionIAMRole.Arn
+    Export: 
+      Name: !Sub stepfnIAM-${env}
+
+
+  SGredshift:
+    Description: Iam for glue execution #desc is wrong this is the SG attached to redshift
+    Value: !Ref MyRedshiftSecurityGroup
+    Export: 
+      Name: !Sub redshiftSg-${env}
+
+  subnetid11:
+    Description: Private subnet 1
+    Value: !Ref MyPrivateSubnet1
+    Export: 
+      Name: PVTSUBNET11
+
+  subnetid2:
+    Description: Private subnet 1
+    Value: !Ref MyPrivateSubnet2
+    Export: 
+      Name: PVTSUBNET2
+
+  subnetid3:
+    Description: Private subnet 1
+    Value: !Ref MyPrivateSubnet3
+    Export: 
+      Name: PVTSUBNET3
+
+  redshiftIAMRoleArn:
+    Description: Default IAM role of redshift
+    Value: !GetAtt CICDIAMROLE.Arn
+    Export: 
+      Name: redshiftIAMARn
+
+

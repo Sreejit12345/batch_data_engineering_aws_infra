@@ -1,0 +1,171 @@
+
+# Based on env: 
+# Sets up 3 s3 buckets (raw, bronze, silver) + corresponding glue databases pointing to warehouse directory
+# Sets up 2 s3 buckets (sourcecode, metadata) + corresponding glue databases poiting to warehouse directory . no glue database for source code
+# sets up 1 secret manager with 1 secret for github PAt which is needed to call api.
+# Sets up 1 redshift namespace and workgroup.
+
+# Remember - the IAM attached to the redshift serverless namespace- is env independent.
+
+#Please run networking stack before this so vpc and subnets etc are created.
+
+Parameters:
+  env:
+    Type: String
+    AllowedValues: [dev,prod]
+
+
+  GithubPat:
+    Description: "Enter the PAT for the selected enviroment"
+    Type: String
+    NoEcho : true
+  
+Resources:
+
+  Mys3BucketRaw:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub raw-githubanalytics-${env} 
+      Tags:
+        - Key : type
+          Value : cloudformation
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  Mys3BucketBronze:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub bronze-githubanalytics-${env} 
+      Tags:
+        - Key : type
+          Value : cloudformation
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  Mys3BucketSilver:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub silver-githubanalytics-${env} 
+      Tags:
+        - Key : type
+          Value : cloudformation
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  Mys3BucketSourceCode:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub sourcecode-githubanalytics-${env} 
+      Tags:
+        - Key : type
+          Value : cloudformation
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  Mys3BucketMetaData:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub metadata-githubanalytics-${env} 
+      Tags:
+        - Key : type
+          Value : cloudformation
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  MyGlueCatalogRaw:
+    Type: 'AWS::Glue::Database'
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Description: !Sub ${env} Database for raw layer
+        Name: !Sub raw-githubanalytics-${env}
+        LocationUri: !Sub "s3://${Mys3BucketRaw}/warehouse/"
+  
+
+  MyGlueCatalogBronze:
+    Type: 'AWS::Glue::Database'
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Description: !Sub ${env} Database for bronze layer
+        Name: !Sub bronze-githubanalytics-${env}
+        LocationUri: !Sub "s3://${Mys3BucketBronze}/warehouse/"
+  
+  MyGlueCatalogSilver:
+    Type: 'AWS::Glue::Database'
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Description: !Sub ${env} Database for silver layer
+        Name: !Sub silver-githubanalytics-${env}
+        LocationUri: !Sub "s3://${Mys3BucketSilver}/warehouse/"
+  
+
+  MyGlueCatalogMetadata:
+    Type: 'AWS::Glue::Database'
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Description: !Sub ${env} Database for metadata layer
+        Name: !Sub metadata-githubanalytics-${env}
+        LocationUri: !Sub "s3://${Mys3BucketMetaData}/warehouse/"
+  
+  
+  SecretManager:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Github PAT to query API
+      Name: !Sub github_pat_${env}
+      SecretString: !Ref GithubPat
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+
+
+  # By default enhanced routing is turned off- so data goues through aws managed n/w over public internet.
+  # Thats why even though redshift is in pvt subnet we can do redshift specturm adn connect to iceberg tables in glue catalog.
+
+  RedshiftServerlessNamespace:
+    Type: AWS::RedshiftServerless::Namespace
+    Properties:
+      NamespaceName: !Sub redshift-serving-namespace-${env}
+      DbName: !Sub githubanalytics-${env}
+      AdminUsername: admin
+      ManageAdminPassword: true
+      IamRoles:
+        - !ImportValue redshiftIAMARn
+      DefaultIamRoleArn: !ImportValue redshiftIAMARn
+      
+
+  RedshiftServerlessWorkgroup:
+    Type: AWS::RedshiftServerless::Workgroup
+    Properties:
+      WorkgroupName: !Sub redshift-serving-workgroup-${env}
+      EnhancedVpcRouting: false
+      PubliclyAccessible: false
+      BaseCapacity: 4
+      MaxCapacity: 4
+      SubnetIds:
+        - !ImportValue PVTSUBNET11
+        - !ImportValue PVTSUBNET2
+        - !ImportValue PVTSUBNET3
+      SecurityGroupIds:
+        - Fn::ImportValue: !Sub "redshiftSg-${env}"
+    
+      NamespaceName: !Ref RedshiftServerlessNamespace
+      
+  
