@@ -3,13 +3,9 @@
 # Sets up an IAM role that is used by step fucntion
 # Security group to control redshift serverless networking.
 
-# for all env a single cicd iam role that is used by githubactions to deploy code. This role is also used to deploy code to redshift serverless by cicd for all env.
-# Remeber our dev and prod are in same aws account and also we must create stack for dev atleast  once- which is when cicd role is created, it is skipped for others 
-
 # sets up a vpc and 3 private subnets in different AZs for resdshift serverless to run . 
 # The VPC and subnets are not per environment- to save costs.  and also we must create stack for dev atleast  once- which is when these are created, it is skipped for other env.
 
-# SG created is env specifc
 
 Parameters:
   env:
@@ -60,56 +56,6 @@ Resources:
         - "arn:aws:iam::aws:policy/AmazonSNSFullAccess"
         - "arn:aws:iam::aws:policy/AWSStepFunctionsFullAccess"
      
-  CICDIAMROLE:  #assumed by github actions to deploy code- also assumed by github actions to deploy code to redshift for all env. assumed by redshift for operations like load unload etc.
-    Type: AWS::IAM::Role
-    Condition: DevEnv
-    Properties:
-      RoleName: cicd-iam
-      AssumeRolePolicyDocument:    
-        Version: "2012-10-17"
-        Statement:
-
-        # This allows githib cicd oidc provider to access aws
-          - Effect: Allow
-            Principal:
-              Federated: 'arn:aws:iam::468094684048:oidc-provider/token.actions.githubusercontent.com' 
-            Action: 
-              - "sts:AssumeRoleWithWebIdentity"
-            Condition: 
-              StringEquals:
-                'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com' 
-              StringLike:
-                'token.actions.githubusercontent.com:sub':
-                  - 'repo:Sreejit12345@104053831/batch_data_engineering_aws@1430822813:*'
-          # This allows iam users with proper permissions to access this role
-          - Effect: Allow
-            Principal:
-              AWS: 'arn:aws:iam::468094684048:root'
-            Action: 
-              - "sts:AssumeRole"
-          
-          # Allows redshift serverless to assume this IAM role
-          - Effect: Allow
-            Principal:
-              Service: 'redshift.amazonaws.com'
-            Action: 
-              - "sts:AssumeRole"
-
-      ManagedPolicyArns: 
-        - "arn:aws:iam::aws:policy/AdministratorAccess"
-        - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
-        - "arn:aws:iam::aws:policy/AmazonRedshiftFullAccess"
-        - "arn:aws:iam::aws:policy/AmazonRedshiftQueryEditorV2ReadWriteSharing"
-        - "arn:aws:iam::aws:policy/AmazonRedshiftDataFullAccess"
-        - "arn:aws:iam::aws:policy/AmazonRedshiftAllCommandsFullAccess"
-      
-      # needed so that this IAM role's corresponding user in redshift 
-      # (which is used to create objects) is automaticlaly assigned the role "admin_role" in db.
-      Tags:
-        - Key: RedshiftDbRoles
-          Value: admin_role
-
-  
   MyVPC:
     Type:  AWS::EC2::VPC
     Condition: DevEnv
@@ -186,11 +132,4 @@ Outputs:
     Value: !Ref MyPrivateSubnet3
     Export: 
       Name: PVTSUBNET3
-
-  redshiftIAMRoleArn:
-    Description: Default IAM role of redshift
-    Value: !GetAtt CICDIAMROLE.Arn
-    Export: 
-      Name: redshiftIAMARn
-
-
+      

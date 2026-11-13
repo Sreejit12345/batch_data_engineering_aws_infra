@@ -1,0 +1,92 @@
+# Base Stack - this has to run once for the main "cicd-iam" role to get created.
+# This is a manual step and needs to be run once by user for each aws account, not each env.
+# This creates an IAM role that is multi-env, which helps in deploying other stacks and also used to deploy source code.
+# This is also used by redshift serverless.
+
+# Usually for a project we run dev first and then move to prod. During dev run this stack is created. If we move directly to prod it fails.
+# We also assume our dev and prod are in the same AWS account.
+
+
+# As a pre-req also we need to set up OIDC connect for that AWS acc. 
+# This stack creates the role that maps to the OIDC provider.2 repos can assume this role 1 for infra deployment, other for code deployment.
+
+# https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc.html#manage-oidc-provider-console
+# https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws#adding-the-identity-provider-to-aws
+
+Parameters:
+  env:
+    Type: String
+    AllowedValues: [dev, prod]
+
+Conditions:
+  DevEnv: !Equals [!Ref env , dev]
+  ProdEnv: !Equals [!Ref env , prod]
+
+Resources:
+  CICDIAMROLE:
+    Type: AWS::IAM::Role
+    Condition: DevEnv
+    Properties:
+      RoleName: cicd-iam
+      AssumeRolePolicyDocument:    
+        Version: "2012-10-17"
+        Statement:
+
+        # This allows githib cicd oidc provider to access aws
+          - Effect: Allow
+            Principal:
+              Federated: 'arn:aws:iam::468094684048:oidc-provider/token.actions.githubusercontent.com' 
+            Action: 
+              - "sts:AssumeRoleWithWebIdentity"
+            Condition: 
+              StringEquals:
+                'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com' 
+              StringLike:
+                'token.actions.githubusercontent.com:sub':
+                  - 'repo:Sreejit12345@104053831/batch_data_engineering_aws@1430822813:*'   #code repo
+                  - 'repo:Sreejit12345@104053831/batch_data_engineering_aws_infra@1456752222:*'   #infra repo
+
+          # This allows iam users in aws account with proper permissions to access this role
+          - Effect: Allow
+            Principal:
+              AWS: 'arn:aws:iam::468094684048:root'
+            Action: 
+              - "sts:AssumeRole"
+          
+          # Allows redshift serverless to assume this IAM role
+          - Effect: Allow
+            Principal:
+              Service: 'redshift.amazonaws.com'
+            Action: 
+              - "sts:AssumeRole"
+
+           # Allows cloudformation to assume this IAM role, to create other stacks
+          - Effect: Allow
+            Principal:
+              Service: 'cloudformation.amazonaws.com'
+            Action: 
+              - "sts:AssumeRole"
+
+
+      ManagedPolicyArns: 
+        - "arn:aws:iam::aws:policy/AdministratorAccess"
+        - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+        - "arn:aws:iam::aws:policy/AmazonRedshiftFullAccess"
+        - "arn:aws:iam::aws:policy/AmazonRedshiftQueryEditorV2ReadWriteSharing"
+        - "arn:aws:iam::aws:policy/AmazonRedshiftDataFullAccess"
+        - "arn:aws:iam::aws:policy/AmazonRedshiftAllCommandsFullAccess"
+        - "arn:aws:iam::aws:policy/AWSCloudFormationFullAccess"
+      
+      # needed so that this IAM role's corresponding user in redshift 
+      # (which is used to create objects) is automaticlaly assigned the role "admin_role" in db.
+      # We must make sure "admin_role" is created in db.
+      Tags:
+        - Key: RedshiftDbRoles
+          Value: admin_role
+
+Outputs:
+  redshiftIAMRoleArn:
+    Description: Default IAM role of redshift, and used to deploy other stacks to aws
+    Value: !GetAtt CICDIAMROLE.Arn
+    Export: 
+      Name: redshiftIAMARn
