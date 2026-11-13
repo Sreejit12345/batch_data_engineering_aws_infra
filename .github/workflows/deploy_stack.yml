@@ -1,12 +1,14 @@
-# deploys source code to dev. 
 # Deploys stack networking.yml , storage.yml and then compute.yml
+# Make sure to run setup.yml manually once per aws account, not per env.
 
-name: infra_deployment_dev
+name: infra_deployment
 
 on:
     push:
         branches :
-            - dev
+            - 'dev'
+            - 'prod'
+
 permissions:
     id-token: write
     contents: read
@@ -28,10 +30,10 @@ jobs:
                 role-session-name: SreejitsSession
 
 
-            - name: Deploy network stack to AWS for dev
+            - name: Deploy network stack to AWS
               uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
               with:
-                name: !Sub network_stack-${}
+                name: network-stack-${{ github.ref_name }}
                 template: ./src/stacks/networking.yml
-                parameter-overrides: 'env=dev'
+                parameter-overrides: 'env=${{ github.ref_name }}'
                 
