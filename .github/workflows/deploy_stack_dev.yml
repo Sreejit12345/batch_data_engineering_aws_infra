@@ -27,4 +27,11 @@ jobs:
                 aws-region: "ap-south-1"
                 role-session-name: SreejitsSession
 
+
+            - name: Deploy network stack to AWS for dev
+              uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
+              with:
+                name: !Sub network_stack-${}
+                template: ./src/stacks/networking.yml
+                parameter-overrides: 'env=dev'
                 
