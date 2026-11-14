@@ -2,88 +2,133 @@
 
 This project provisions the AWS resources needed for the `batch_data_engineering_aws` workload and deploys them through GitHub Actions.
 
-It creates the networking, storage, and compute layers for each environment and keeps deployments controlled by branch and environment naming.
+It creates the networking, storage, and compute layers for each environment and keeps deployments based on branch and environment naming.
 
 ## What it does
 
 This repo sets up the AWS foundation for the data engineering workload:
 - GitHub OIDC and IAM setup at the account level
-- VPC, subnets, routing, and security groups 
+- VPC, subnets, IAM roles, and security groups 
 - S3 buckets/Glue catalogs and Secrets Manager entries
 - Glue jobs/Step Functions/ SNS topics and Redshift resources
 - GitHub Actions pipeline to deploy everything in order
 
-This repo is meant to be used alongside the application code repo that runs the actual batch jobs.
+This repo is meant to be used alongside the application code repo (batch_data_engineering_aws) that runs the actual jobs.
 
 ## Resource map
 
-The diagram below shows the main AWS resources this project creates and marks whether each one is account-level/shared or environment-specific.
+The diagram below shows the AWS resources CloudFormation creates in this repo and marks whether they are account-level/shared or environment-specific.
 
 ```mermaid
 flowchart LR
-    subgraph ACCOUNT[Account-level / shared resources]
-        GH[GitHub repo<br/>dev / prod / future env branches]
+    subgraph ACCOUNT[Account-level / shared]
         GHA[GitHub Actions pipeline]
-        OIDC[GitHub OIDC provider<br/>account-level]
-        IAM[GitHub deploy IAM role<br/>account-level]
-        RG[Default Redshift IAM role<br/>account-level]
-        SETUP[setup.yml<br/>account bootstrap]
+        OIDC[GitHub OIDC provider]
+        CICD[IAM role: cicd-iam]
+        REDSHIFT_ROLE[Default Redshift IAM role]
+        SETUP[setup.yml bootstrap]
     end
 
-    subgraph ENV[Environment-specific resources<br/>one per env: dev / test / uat / prod]
-        VPC[VPC<br/>shared or env-scoped]
-        SUB[Subnets<br/>multi-env / cost-optimized]
-        SG[Security groups]
-        RT[Route tables / network access]
-        S3[S3 buckets<br/>landing / processed / scripts / artifacts]
-        PAT[Secrets Manager<br/>github-pat-<env>]
-        GLUE[Glue jobs / crawlers]
-        SFN[Step Functions state machines]
-        SNS[SNS topics]
-        REDSHIFT[Redshift namespace]
+    subgraph NETWORK[networking.yml]
+        VPC[VPC: MyVPC]
+        SUB1[Subnet: MyPrivateSubnet1]
+        SUB2[Subnet: MyPrivateSubnet2]
+        SUB3[Subnet: MyPrivateSubnet3]
+        SG[Security group: redshift-sg-${env}]
+        GLUE_IAM[Role: glue-iam-${env}]
+        STEP_IAM[Role: stepFunction-iam-${env}]
     end
 
-    GH --> GHA
-    GHA --> OIDC
+    subgraph STORAGE[storage.yml]
+        RAW[S3 bucket: raw-githubanalytics-${env}]
+        BRONZE[S3 bucket: bronze-githubanalytics-${env}]
+        SILVER[S3 bucket: silver-githubanalytics-${env}]
+        SOURCE[S3 bucket: sourcecode-githubanalytics-${env}]
+        META[S3 bucket: metadata-githubanalytics-${env}]
+        DB_RAW[Glue database: raw-githubanalytics-${env}]
+        DB_BRONZE[Glue database: bronze-githubanalytics-${env}]
+        DB_SILVER[Glue database: silver-githubanalytics-${env}]
+        DB_META[Glue database: metadata-githubanalytics-${env}]
+        PAT[Secrets Manager: github_pat_${env}]
+        NS[Redshift namespace: redshift-serving-namespace-${env}]
+        WG[Redshift workgroup: redshift-serving-workgroup-${env}]
+    end
+
+    subgraph COMPUTE[compute.yml]
+        JOB1[Glue job: githubanalytics-extract-${env}]
+        JOB2[Glue job: githubanalytics-bronzeingestion-${env}]
+        JOB3[Glue job: githubanalytics-silvertransform-${env}]
+        SFN[Step Functions: orchestrator-workflow-${env}]
+        SCH[EventBridge scheduler: github-analytics-schedule-${env}]
+        SNS[SNS topic: github-analytics-${env}]
+        SUB_EMAIL[SNS email subscription]
+    end
+
     GHA --> SETUP
+    GHA --> OIDC
     GHA --> NET[networking.yml]
     GHA --> STG[storage.yml]
     GHA --> COMP[compute.yml]
 
-    OIDC --> IAM
-    SETUP --> IAM
-    SETUP --> RG
+    SETUP --> CICD
+    OIDC --> CICD
+    SETUP --> REDSHIFT_ROLE
 
     NET --> VPC
-    NET --> SUB
+    NET --> SUB1
+    NET --> SUB2
+    NET --> SUB3
     NET --> SG
-    NET --> RT
+    NET --> GLUE_IAM
+    NET --> STEP_IAM
 
-    STG --> S3
+    STG --> RAW
+    STG --> BRONZE
+    STG --> SILVER
+    STG --> SOURCE
+    STG --> META
+    STG --> DB_RAW
+    STG --> DB_BRONZE
+    STG --> DB_SILVER
+    STG --> DB_META
     STG --> PAT
-    STG --> IAM
+    STG --> NS
+    STG --> WG
+    NS --> REDSHIFT_ROLE
+    WG --> SG
+    WG --> SUB1
+    WG --> SUB2
+    WG --> SUB3
 
-    COMP --> GLUE
+    COMP --> JOB1
+    COMP --> JOB2
+    COMP --> JOB3
     COMP --> SFN
+    COMP --> SCH
     COMP --> SNS
-    COMP --> REDSHIFT
-    COMP --> IAM
-    REDSHIFT --> RG
+    SNS --> SUB_EMAIL
+    JOB1 --> GLUE_IAM
+    JOB2 --> GLUE_IAM
+    JOB3 --> GLUE_IAM
+    SFN --> STEP_IAM
+    SCH --> STEP_IAM
 
     classDef account fill:#eaf2ff,stroke:#1f3a5f,stroke-width:1px,color:#10233d;
-    classDef env fill:#eafaf1,stroke:#1b7a4a,stroke-width:1px,color:#123d2b;
-    classDef stack fill:#fff6dc,stroke:#9b6f00,stroke-width:1px,color:#4c3400;
+    classDef network fill:#fff4d6,stroke:#9b6f00,stroke-width:1px,color:#4c3400;
+    classDef storage fill:#eafaf1,stroke:#1b7a4a,stroke-width:1px,color:#123d2b;
+    classDef compute fill:#f8e8ff,stroke:#6e3da7,stroke-width:1px,color:#38204a;
 
-    class GH,GHA,OIDC,IAM,RG,SETUP account;
-    class VPC,SUB,SG,RT,S3,PAT,GLUE,SFN,SNS,REDSHIFT env;
-    class NET,STG,COMP stack;
+    class GHA,OIDC,CICD,REDSHIFT_ROLE,SETUP account;
+    class VPC,SUB1,SUB2,SUB3,SG,GLUE_IAM,STEP_IAM network;
+    class RAW,BRONZE,SILVER,SOURCE,META,DB_RAW,DB_BRONZE,DB_SILVER,DB_META,PAT,NS,WG storage;
+    class JOB1,JOB2,JOB3,SFN,SCH,SNS,SUB_EMAIL compute;
 ```
 
-### Scope by resource type
+### Resource scope summary
 
-- Account-level / shared: GitHub repo, GitHub Actions pipeline, OIDC trust, IAM roles, default Redshift IAM role
-- Environment-specific: S3 buckets, Secrets Manager entries, Glue jobs, Step Functions, SNS topics, Redshift namespaces
-- Mixed: networking resources can be shared or environment-scoped depending on cost and design, but the repo treats subnets as a multi-environment optimization
+- Account-level / shared: GitHub OIDC, IAM deployment role, default Redshift IAM role, account bootstrap
+- Environment-specific: S3 buckets, Secrets Manager entries, Glue databases, Glue jobs, Step Functions, EventBridge schedule, SNS topic, Redshift namespace, Redshift workgroup
+- Mixed / shared where applicable: VPC, subnets, and security groups are created as part of the networking stack and can be reused across environments to save cost
 
 
 ## Assumptions
@@ -135,26 +180,26 @@ Important:
 
 ### 2. Store the GitHub PAT in AWS Secrets Manager
 
-This project needs a GitHub PAT to call the GitHub REST API during ingestion jobs. The secret should not be stored in the repo.
+This project needs a GitHub PAT to call the GitHub REST API during the ingestion job. The secret should not be stored in the repo. Currently, we assume all env have same secret value, so we create only 1 github UI secret, but in secret manager cloudformation creates different secret names based on env.
 
 To reuse this flow:
 - create the secret in GitHub under `Settings -> Secrets and variables -> Actions -> Repository secrets`
-- the GitHub Actions workflow automatically reads the repository secret, passes it to the deployment process, and the `storage.yml` stack stores it in AWS Secrets Manager
+- the GitHub Actions workflow automatically reads the repository secret, passes it to the deployment process, and the `storage.yml` stack stores it in AWS Secrets Manager per env.
 
 ### 3. Trigger the deployment
 
-After the IAM trust and secret are in place:
+After step1 and step2:
 
 1. clone the infrastructure repo
 2. commit the changes
 3. push to the `dev` branch
 4. GitHub Actions triggers automatically
-5. the pipeline deploys the remaining stacks in this order:
+5. the cicd pipeline deploys the remaining stacks in this order:
    - networking
    - storage
    - compute
 
-The order matters because some resources depend on earlier stacks being present.
+The order matters because some resources depend on the earlier stacks being present.
 
 
 ## Deployment flow
@@ -175,7 +220,7 @@ The execution flow is:
 
 ## Summary
 
-This repo creates the AWS foundation for the batch data engineering workload and gives you a repeatable way to deploy it through GitHub Actions. It handles the infrastructure layer so the application code can be deployed and run in a clean environment.
+This repo creates the infra for the batch data engineering workload and gives a way to deploy it through GitHub Actions. It handles the infrastructure layer so the application code can be deployed and run in a clean environment.
 
 
 
