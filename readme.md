@@ -17,36 +17,38 @@ This repo is meant to be used alongside the application code repo that runs the 
 
 ## Resource map
 
+The diagram below shows the main AWS resources this project creates and marks whether each one is account-level/shared or environment-specific.
+
 ```mermaid
-flowchart TD
-    GH[GitHub Repository<br/>dev / prod / future env branches]
-    GHA[GitHub Actions CI/CD Pipeline]
-    OIDC[GitHub OIDC Identity Provider<br/>AWS IAM Role]
+flowchart LR
+    subgraph ACCOUNT[Account-level / shared resources]
+        GH[GitHub repo<br/>dev / prod / future env branches]
+        GHA[GitHub Actions pipeline]
+        OIDC[GitHub OIDC provider<br/>account-level]
+        IAM[GitHub deploy IAM role<br/>account-level]
+        RG[Default Redshift IAM role<br/>account-level]
+        SETUP[setup.yml<br/>account bootstrap]
+    end
 
-    SETUP[setup.yml<br/>Account bootstrap]
-    NET[networking.yml<br/>Network stack]
-    STG[storage.yml<br/>Storage stack]
-    COMP[compute.yml<br/>Compute stack]
-
-    VPC[VPC]
-    SUB[Subnets]
-    SG[Security Groups]
-    RT[Route Tables / Network Access]
-
-    S3[Amazon S3 Buckets]
-    SM[AWS Secrets Manager<br/>GitHub PAT]
-    IAM[IAM Roles / Policies]
-
-    GLUE[AWS Glue Jobs / Crawlers]
-    REDSHIFT[Amazon Redshift Namespace]
-    RG[Default Redshift IAM Role]
+    subgraph ENV[Environment-specific resources<br/>one per env: dev / test / uat / prod]
+        VPC[VPC<br/>shared or env-scoped]
+        SUB[Subnets<br/>multi-env / cost-optimized]
+        SG[Security groups]
+        RT[Route tables / network access]
+        S3[S3 buckets<br/>landing / processed / scripts / artifacts]
+        PAT[Secrets Manager<br/>github-pat-<env>]
+        GLUE[Glue jobs / crawlers]
+        SFN[Step Functions state machines]
+        SNS[SNS topics]
+        REDSHIFT[Redshift namespace]
+    end
 
     GH --> GHA
     GHA --> OIDC
     GHA --> SETUP
-    GHA --> NET
-    GHA --> STG
-    GHA --> COMP
+    GHA --> NET[networking.yml]
+    GHA --> STG[storage.yml]
+    GHA --> COMP[compute.yml]
 
     OIDC --> IAM
     SETUP --> IAM
@@ -58,22 +60,30 @@ flowchart TD
     NET --> RT
 
     STG --> S3
-    STG --> SM
+    STG --> PAT
     STG --> IAM
 
     COMP --> GLUE
+    COMP --> SFN
+    COMP --> SNS
     COMP --> REDSHIFT
     COMP --> IAM
     REDSHIFT --> RG
 
-    classDef git fill:#f9f,stroke:#333,stroke-width:1px;
-    classDef aws fill:#dff0ff,stroke:#333,stroke-width:1px;
-    classDef stack fill:#e6ffe6,stroke:#333,stroke-width:1px;
+    classDef account fill:#eaf2ff,stroke:#1f3a5f,stroke-width:1px,color:#10233d;
+    classDef env fill:#eafaf1,stroke:#1b7a4a,stroke-width:1px,color:#123d2b;
+    classDef stack fill:#fff6dc,stroke:#9b6f00,stroke-width:1px,color:#4c3400;
 
-    class GH,GHA git;
-    class OIDC,IAM,VPC,SUB,SG,RT,S3,SM,GLUE,REDSHIFT,RG aws;
-    class SETUP,NET,STG,COMP stack;
+    class GH,GHA,OIDC,IAM,RG,SETUP account;
+    class VPC,SUB,SG,RT,S3,PAT,GLUE,SFN,SNS,REDSHIFT env;
+    class NET,STG,COMP stack;
 ```
+
+### Scope by resource type
+
+- Account-level / shared: GitHub repo, GitHub Actions pipeline, OIDC trust, IAM roles, default Redshift IAM role
+- Environment-specific: S3 buckets, Secrets Manager entries, Glue jobs, Step Functions, SNS topics, Redshift namespaces
+- Mixed: networking resources can be shared or environment-scoped depending on cost and design, but the repo treats subnets as a multi-environment optimization
 
 
 ## Assumptions
