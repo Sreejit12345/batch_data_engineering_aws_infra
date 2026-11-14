@@ -123,11 +123,6 @@ flowchart LR
     class RAW,BRONZE,SILVER,SOURCE,META,DB_RAW,DB_BRONZE,DB_SILVER,DB_META,PAT,NS,WG storage;
     class JOB1,JOB2,JOB3,SFN,SCH,SNS,EMAIL compute;
 ```
-### Resource scope summary
-
-- Account-level / shared: GitHub OIDC, IAM deployment role, default Redshift IAM role, account bootstrap
-- Environment-specific: S3 buckets, Secrets Manager entries, Glue databases, Glue jobs, Step Functions, EventBridge schedule, SNS topic, Redshift namespace, Redshift workgroup
-- Mixed / shared where applicable: VPC, subnets, and security groups are created as part of the networking stack and can be reused across environments to save cost
 
 
 ## Assumptions
