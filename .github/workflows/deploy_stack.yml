@@ -43,14 +43,14 @@ jobs:
             - name: Deploy storage stack to AWS
               uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
               with:
-                name: network-stack-${{ github.ref_name }}
+                name: storage-stack-${{ github.ref_name }}
                 template: ./src/stacks/storage.yml
                 parameter-overrides: 'env=${{ github.ref_name }},GithubPat=${{ secrets.GITHUBPAT }}'
         
             - name: Deploy compute stack to AWS
               uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
               with:
-                name: network-stack-${{ github.ref_name }}
+                name: compute-stack-${{ github.ref_name }}
                 template: ./src/stacks/compute.yml
                 parameter-overrides: 'env=${{ github.ref_name }}'
              
