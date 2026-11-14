@@ -38,12 +38,14 @@ jobs:
                 parameter-overrides: 'env=${{ github.ref_name }}'
                 capabilities: CAPABILITY_NAMED_IAM
             
+
+            # Remember- this needs a github PAT token- so we create the secret manually in github UI and refer it here.
             - name: Deploy storage stack to AWS
               uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
               with:
                 name: network-stack-${{ github.ref_name }}
                 template: ./src/stacks/storage.yml
-                parameter-overrides: 'env=${{ github.ref_name }}'
+                parameter-overrides: 'env=${{ github.ref_name }},GithubPat=${{ secrets.GITHUBPAT }}'
         
             - name: Deploy compute stack to AWS
               uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
