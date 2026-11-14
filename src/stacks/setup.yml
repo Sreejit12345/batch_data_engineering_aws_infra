@@ -4,6 +4,7 @@
 # This is also used by redshift serverless.
 
 # Usually for a project we run dev first and then move to prod. During dev run this stack is created. If we move directly to prod it fails.
+# While running manually give parameter=dev
 # We also assume our dev and prod are in the same AWS account.
 
 

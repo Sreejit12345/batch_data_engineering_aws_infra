@@ -37,5 +37,21 @@ jobs:
                 template: ./src/stacks/networking.yml
                 parameter-overrides: 'env=${{ github.ref_name }}'
                 capabilities: CAPABILITY_NAMED_IAM
+            
+            - name: Deploy storage stack to AWS
+              uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
+              with:
+                name: network-stack-${{ github.ref_name }}
+                template: ./src/stacks/storage.yml
+                parameter-overrides: 'env=${{ github.ref_name }}'
+        
+            - name: Deploy compute stack to AWS
+              uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
+              with:
+                name: network-stack-${{ github.ref_name }}
+                template: ./src/stacks/compute.yml
+                parameter-overrides: 'env=${{ github.ref_name }}'
+             
+                
                 
                 
