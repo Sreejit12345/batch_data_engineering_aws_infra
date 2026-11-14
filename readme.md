@@ -24,44 +24,44 @@ flowchart LR
     subgraph ACCOUNT[Account-level / shared]
         GHA[GitHub Actions pipeline]
         OIDC[GitHub OIDC provider]
-        CICD[IAM role: cicd-iam]
+        CICD[cicd-iam role]
         REDSHIFT_ROLE[Default Redshift IAM role]
-        SETUP[setup.yml bootstrap]
+        SETUP[setup.yml]
     end
 
     subgraph NETWORK[networking.yml]
-        VPC[VPC: MyVPC]
-        SUB1[Subnet: MyPrivateSubnet1]
-        SUB2[Subnet: MyPrivateSubnet2]
-        SUB3[Subnet: MyPrivateSubnet3]
-        SG[Security group: redshift-sg-${env}]
-        GLUE_IAM[Role: glue-iam-${env}]
-        STEP_IAM[Role: stepFunction-iam-${env}]
+        VPC[VPC]
+        SUB1[Subnet 1]
+        SUB2[Subnet 2]
+        SUB3[Subnet 3]
+        SG[Redshift security group]
+        GLUE_IAM[Glue IAM role]
+        STEP_IAM[Step Functions IAM role]
     end
 
     subgraph STORAGE[storage.yml]
-        RAW[S3 bucket: raw-githubanalytics-${env}]
-        BRONZE[S3 bucket: bronze-githubanalytics-${env}]
-        SILVER[S3 bucket: silver-githubanalytics-${env}]
-        SOURCE[S3 bucket: sourcecode-githubanalytics-${env}]
-        META[S3 bucket: metadata-githubanalytics-${env}]
-        DB_RAW[Glue database: raw-githubanalytics-${env}]
-        DB_BRONZE[Glue database: bronze-githubanalytics-${env}]
-        DB_SILVER[Glue database: silver-githubanalytics-${env}]
-        DB_META[Glue database: metadata-githubanalytics-${env}]
-        PAT[Secrets Manager: github_pat_${env}]
-        NS[Redshift namespace: redshift-serving-namespace-${env}]
-        WG[Redshift workgroup: redshift-serving-workgroup-${env}]
+        RAW[raw S3 bucket]
+        BRONZE[bronze S3 bucket]
+        SILVER[silver S3 bucket]
+        SOURCE[sourcecode S3 bucket]
+        META[metadata S3 bucket]
+        DB_RAW[raw Glue database]
+        DB_BRONZE[bronze Glue database]
+        DB_SILVER[silver Glue database]
+        DB_META[metadata Glue database]
+        PAT[GitHub PAT secret]
+        NS[Redshift namespace]
+        WG[Redshift workgroup]
     end
 
     subgraph COMPUTE[compute.yml]
-        JOB1[Glue job: githubanalytics-extract-${env}]
-        JOB2[Glue job: githubanalytics-bronzeingestion-${env}]
-        JOB3[Glue job: githubanalytics-silvertransform-${env}]
-        SFN[Step Functions: orchestrator-workflow-${env}]
-        SCH[EventBridge scheduler: github-analytics-schedule-${env}]
-        SNS[SNS topic: github-analytics-${env}]
-        SUB_EMAIL[SNS email subscription]
+        JOB1[Extract Glue job]
+        JOB2[Bronze Glue job]
+        JOB3[Silver Glue job]
+        SFN[Workflow state machine]
+        SCH[EventBridge schedule]
+        SNS[SNS topic]
+        EMAIL[Email subscription]
     end
 
     GHA --> SETUP
@@ -106,7 +106,7 @@ flowchart LR
     COMP --> SFN
     COMP --> SCH
     COMP --> SNS
-    SNS --> SUB_EMAIL
+    SNS --> EMAIL
     JOB1 --> GLUE_IAM
     JOB2 --> GLUE_IAM
     JOB3 --> GLUE_IAM
@@ -121,9 +121,8 @@ flowchart LR
     class GHA,OIDC,CICD,REDSHIFT_ROLE,SETUP account;
     class VPC,SUB1,SUB2,SUB3,SG,GLUE_IAM,STEP_IAM network;
     class RAW,BRONZE,SILVER,SOURCE,META,DB_RAW,DB_BRONZE,DB_SILVER,DB_META,PAT,NS,WG storage;
-    class JOB1,JOB2,JOB3,SFN,SCH,SNS,SUB_EMAIL compute;
+    class JOB1,JOB2,JOB3,SFN,SCH,SNS,EMAIL compute;
 ```
-
 ### Resource scope summary
 
 - Account-level / shared: GitHub OIDC, IAM deployment role, default Redshift IAM role, account bootstrap
