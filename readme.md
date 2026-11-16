@@ -49,8 +49,8 @@ Feature branches and bugfix branches are not used for deployment
 
 ## Naming conventions
 
-1. Stack names use the pattern `-<branchName>`, except `setup.yml`, which is account-level.
-2. Environment-specific resources like S3 buckets and Glue jobs use the suffix `-<env>`.
+1. Stack names use the pattern `-<branchName>`, except `setup.yml`, which is account-level. if pushed from dev branch it created dev stacks and dev resources, if from prod it creates prod stacks and prod resources.
+2. Environment-specific resources like S3 buckets and Glue jobs use the suffix `-<env>`, which is derived from the branch name.
 3. Shared resources are kept reusable where possible to reduce cost.
 
 ## How to use it
@@ -91,7 +91,7 @@ After step1 and step2:
 
 1. clone the infrastructure repo
 2. commit the changes
-3. push to the `dev` branch
+3. push to the `dev` branch. To move to prod push to `prod` branch.
 4. GitHub Actions triggers automatically
 5. the cicd pipeline deploys the remaining stacks in this order:
    - networking
@@ -106,14 +106,15 @@ The order matters because some resources depend on the earlier stacks being pres
 The execution flow is:
 1. `setup.yml` runs once per AWS account for `dev`
 2. the GitHub PAT is stored in AWS Secrets Manager and referenced by GitHub Actions
-3. a push to `dev` triggers the pipeline
+3. a push to `dev` triggers the pipeline and creates dev infra. To create `prod` infra- push to `prod` branch.
 4. CloudFormation deploys the stacks in order
 5. environment-specific and account specific resources are created with the correct naming convention
 
 ## Operational notes
 
-- feature branches do not trigger deployment. Currently it can deploy through dev and prod branch.
-- stack names and resource names stay consistent with the naming pattern
+- feature branches do not trigger deployment. Currently it can deploy through dev and prod branch. This can be changed by changing the trigger on the githubactions cicd pipeline.
+- stack names and resource names stay consistent with the naming pattern- All stack names and resource names created are eventually sourced from the branch name parameter.
+The branch name is passed into the stack parameter input, which decides the name of stacks and resources.
 - secrets are not hardcoded into code or config files
 - deployment order is part of the setup
 
