@@ -44,6 +44,7 @@ The repo only deploys from environment branches such as:
 - `uat`
 - `prod`
 
+Currently it deploys from `dev` and `prod` branch.
 
 Feature branches and bugfix branches are not used for deployment
 
