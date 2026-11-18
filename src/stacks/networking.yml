@@ -93,7 +93,8 @@ Resources:
     Properties:
       GroupName: !Sub redshift-sg-${env}
       GroupDescription: Security group for redshift
-      VpcId: !Ref MyVPC
+      VpcId: !If [DevEnv,!Ref MyVPC,!ImportValue VpcId] #for non DEV it refers to the VPC created in DEV
+
 
 Outputs:
   iamglue:
@@ -116,20 +117,30 @@ Outputs:
       Name: !Sub redshiftSg-${env}
 
   subnetid11:
+    Condition: DevEnv
     Description: Private subnet 1
     Value: !Ref MyPrivateSubnet1
     Export: 
       Name: PVTSUBNET11
 
   subnetid2:
-    Description: Private subnet 1
+    Condition: DevEnv
+    Description: Private subnet 2
     Value: !Ref MyPrivateSubnet2
     Export: 
       Name: PVTSUBNET2
 
   subnetid3:
-    Description: Private subnet 1
+    Condition: DevEnv
+    Description: Private subnet 3
     Value: !Ref MyPrivateSubnet3
     Export: 
       Name: PVTSUBNET3
+  
+  vpcid:
+    Condition: DevEnv
+    Description: The VPC ID (created in dev, imported in prod)
+    Value:  !Ref MyVPC
+    Export:
+      Name: VpcId
       
